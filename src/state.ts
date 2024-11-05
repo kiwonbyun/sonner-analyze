@@ -7,8 +7,8 @@ let toastsCounter = 1;
 type titleT = (() => React.ReactNode) | React.ReactNode;
 
 class Observer {
-  subscribers: Array<(toast: ExternalToast | ToastToDismiss) => void>;
-  toasts: Array<ToastT | ToastToDismiss>;
+  subscribers: Array<(toast: ExternalToast | ToastToDismiss) => void>; // 토스트 상태 변화를 구독하는 함수들? => toast 상태가 변경될때마다 호출될 함수들.
+  toasts: Array<ToastT | ToastToDismiss>; // 현재 활성화된 토스트들
 
   constructor() {
     this.subscribers = [];
@@ -17,10 +17,13 @@ class Observer {
 
   // We use arrow functions to maintain the correct `this` reference
   subscribe = (subscriber: (toast: ToastT | ToastToDismiss) => void) => {
+    // 인자로 받은 subscriber를 this.subscribers 배열에 추가함.
     this.subscribers.push(subscriber);
 
+    // 이 리턴하는 함수가 useEffect의 클린업에 들어감. 즉, 언마운트될때 this.subscribers 배열에서 해당 subscriber를 추출함.
     return () => {
       const index = this.subscribers.indexOf(subscriber);
+      // this.subscribers에서 subscriber 제거
       this.subscribers.splice(index, 1);
     };
   };
@@ -191,6 +194,7 @@ class Observer {
   };
 }
 
+// 싱글톤 패턴으로 앱 전체에 하나의 인스턴스만 존재함.
 export const ToastState = new Observer();
 
 // bind this to the toast function

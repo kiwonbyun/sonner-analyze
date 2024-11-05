@@ -442,28 +442,38 @@ function getDocumentDirection(): ToasterProps['dir'] {
   return dirAttribute as ToasterProps['dir'];
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 function useSonner() {
   const [activeToasts, setActiveToasts] = React.useState<ToastT[]>([]);
 
   React.useEffect(() => {
+    // ToastState는 싱글톤 패턴으로 만들어진 상태를 기록하는 Observer객체임.
+    // useSonner를 사용하면 해당 객체에 subscribe메서드를 호출함.
+    // addToast(toast)를 호출하면 최종적으로 subscriber가 toast를 매개변수로 호출됨.
     return ToastState.subscribe((toast) => {
       setActiveToasts((currentToasts) => {
+        // 전달된 toast매개변수가 dismiss:true이면 activeToast에서 제거한다.
         if ('dismiss' in toast && toast.dismiss) {
           return currentToasts.filter((t) => t.id !== toast.id);
         }
 
+        // dismiss가 아니라면 이미 존재하는 toast id인지 찾는다.
         const existingToastIndex = currentToasts.findIndex((t) => t.id === toast.id);
+        // 만약 매개변수로 전달받은 toast 객체의 id가 이미 있었다면
         if (existingToastIndex !== -1) {
           const updatedToasts = [...currentToasts];
+          // 기존 속성을 최대한 유지하고, 새로 받은 속성으로 업데이트 한다.
           updatedToasts[existingToastIndex] = { ...updatedToasts[existingToastIndex], ...toast };
           return updatedToasts;
         } else {
+          // 모든 케이스에 해당되지 않고 순수하게 추가된 toast라면 배열 맨 앞에 추가한다.
           return [toast, ...currentToasts];
         }
       });
     });
   }, []);
 
+  // 결과적으로 이 훅을 호출하면 현재 ToastState의 현재 상태를 동일하게 가지고있는 activeToast배열을 사용하게 된다.
   return {
     toasts: activeToasts,
   };
@@ -493,6 +503,7 @@ const Toaster = forwardRef<HTMLElement, ToasterProps>(function Toaster(props, re
     cn = _cn,
   } = props;
   const [toasts, setToasts] = React.useState<ToastT[]>([]);
+  // possiblePositions는 ['bottom-right', 'bottom-left'...] 이런 식
   const possiblePositions = React.useMemo(() => {
     return Array.from(
       new Set([position].concat(toasts.filter((toast) => toast.position).map((toast) => toast.position))),
@@ -555,14 +566,18 @@ const Toaster = forwardRef<HTMLElement, ToasterProps>(function Toaster(props, re
     });
   }, []);
 
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   React.useEffect(() => {
+    // 시스템 테마를 사용하지 않는 경우
     if (theme !== 'system') {
+      // 설정된 (default light) 테마로 설정
       setActualTheme(theme);
       return;
     }
 
     if (theme === 'system') {
       // check if current preference is dark
+      // 시스템 체크해서 테마설정
       if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
         // it's currently dark
         setActualTheme('dark');
@@ -572,9 +587,12 @@ const Toaster = forwardRef<HTMLElement, ToasterProps>(function Toaster(props, re
       }
     }
 
+    // 서버에선 동작하지않음
     if (typeof window === 'undefined') return;
+    // 다크모드
     const darkMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
+    // 랜더링 이후 변경을 감지하도록 이벤트 등록
     try {
       // Chrome & Firefox
       darkMediaQuery.addEventListener('change', ({ matches }) => {
@@ -600,22 +618,27 @@ const Toaster = forwardRef<HTMLElement, ToasterProps>(function Toaster(props, re
     }
   }, [theme]);
 
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   React.useEffect(() => {
     // Ensure expanded is always false when no toasts are present / only one left
+    // 토스트가 1개일때는 항상 expanded가 false인 상태가 된다.
     if (toasts.length <= 1) {
       setExpanded(false);
     }
   }, [toasts]);
 
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   React.useEffect(() => {
+    // 미리 설정된 hotkey를 누르면
     const handleKeyDown = (event: KeyboardEvent) => {
       const isHotkeyPressed = hotkey.every((key) => (event as any)[key] || event.code === key);
 
       if (isHotkeyPressed) {
-        setExpanded(true);
-        listRef.current?.focus();
+        setExpanded(true); // toast가 확장되고
+        listRef.current?.focus(); // 포커스가 옮겨진다.
       }
 
+      // esc를 누르면 확장된 것이 다시 닫힌다.
       if (
         event.code === 'Escape' &&
         (document.activeElement === listRef.current || listRef.current?.contains(document.activeElement))
@@ -628,7 +651,9 @@ const Toaster = forwardRef<HTMLElement, ToasterProps>(function Toaster(props, re
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [hotkey]);
 
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   React.useEffect(() => {
+    // 지금 화면에 toast가 있는데 언마운트 되면 이전 포커스를 초기화
     if (listRef.current) {
       return () => {
         if (lastFocusedElementRef.current) {
@@ -676,23 +701,26 @@ const Toaster = forwardRef<HTMLElement, ToasterProps>(function Toaster(props, re
               } as React.CSSProperties
             }
             onBlur={(event) => {
+              //접근성 키보드 이전 포커스 영역 기억
               if (isFocusWithinRef.current && !event.currentTarget.contains(event.relatedTarget)) {
-                isFocusWithinRef.current = false;
+                isFocusWithinRef.current = false; // 내부에서 포커스가 떠남을 표시
                 if (lastFocusedElementRef.current) {
-                  lastFocusedElementRef.current.focus({ preventScroll: true });
-                  lastFocusedElementRef.current = null;
+                  lastFocusedElementRef.current.focus({ preventScroll: true }); // 포커스가 벗어나면 자연스럽게 이전 요소로 포커스, 스크롤은 움직이지 않는다.
+                  lastFocusedElementRef.current = null; // 포커스가 끝나면 null로 만들어서 초기화
                 }
               }
             }}
             onFocus={(event) => {
+              // data-dismissible="false"가 지정된 요소는 포커스 관리에서 제외(중요한 메세지는 사용자가 닫을 수 없게 함)
               const isNotDismissible =
                 event.target instanceof HTMLElement && event.target.dataset.dismissible === 'false';
 
               if (isNotDismissible) return;
 
+              // 처음으로 영역에 포커스가 들어오는 상황
               if (!isFocusWithinRef.current) {
-                isFocusWithinRef.current = true;
-                lastFocusedElementRef.current = event.relatedTarget as HTMLElement;
+                isFocusWithinRef.current = true; // 내부에 포커스 있음 표시
+                lastFocusedElementRef.current = event.relatedTarget as HTMLElement; // 이전 포커스 영역을 저장
               }
             }}
             onMouseEnter={() => setExpanded(true)}
