@@ -42,6 +42,8 @@ function _cn(...classes: (string | undefined)[]) {
   return classes.filter(Boolean).join(' ');
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// 이 컴포넌트가 Toast한장한장 나타내는 list item이다.
 const Toast = (props: ToastProps) => {
   const {
     invert: ToasterInvert,
@@ -98,12 +100,9 @@ const Toast = (props: ToastProps) => {
     () => toast.closeButton ?? closeButtonFromToaster,
     [toast.closeButton, closeButtonFromToaster],
   );
-  const duration = React.useMemo(
-    () => toast.duration || durationFromToaster || TOAST_LIFETIME,
-    [toast.duration, durationFromToaster],
-  );
-  const closeTimerStartTimeRef = React.useRef(0);
+
   const offset = React.useRef(0);
+  const closeTimerStartTimeRef = React.useRef(0);
   const lastCloseTimerStartTimeRef = React.useRef(0);
   const pointerStartRef = React.useRef<{ x: number; y: number } | null>(null);
   const [y, x] = position.split('-');
@@ -124,23 +123,32 @@ const Toast = (props: ToastProps) => {
 
   offset.current = React.useMemo(() => heightIndex * gap + toastsHeightBefore, [heightIndex, toastsHeightBefore]);
 
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   React.useEffect(() => {
+    // 마운트되면 mounted상태를 true 로 변경. mounted가 false이면 useLayoutEffect 동작 안함.
     // Trigger enter animation without using CSS animation
+    // data-mounted가 true가 되면 css 애니메이션 동작하는 듯?
     setMounted(true);
   }, []);
 
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // 이 부수효과의 쓰임이 뭘까?
   React.useEffect(() => {
     const toastNode = toastRef.current;
     if (toastNode) {
       const height = toastNode.getBoundingClientRect().height;
+      // toast가 마운트 된 후 li 의 높이를 initialHeight로 업데이트 한다.
       // Add toast height to heights array after the toast is mounted
       setInitialHeight(height);
+      // 상위컴포넌트에서 관리하는 상태인, heights배열에 해당 toast의 높이 데이터를 추가한다.
       setHeights((h) => [{ toastId: toast.id, height, position: toast.position }, ...h]);
+      // 현재 toast가 화면에서 unmount 될 때는 heights상태에서 해당 내용을 제거한다.
       return () => setHeights((h) => h.filter((height) => height.toastId !== toast.id));
     }
   }, [setHeights, toast.id]);
 
   React.useLayoutEffect(() => {
+    // 마운트 안됐으면 하지도 마
     if (!mounted) return;
     const toastNode = toastRef.current;
     const originalHeight = toastNode.style.height;
@@ -160,8 +168,10 @@ const Toast = (props: ToastProps) => {
     });
   }, [mounted, toast.title, toast.description, setHeights, toast.id]);
 
+  // ol컴포넌트에서 props로 받은 removeToast함수를 호출한다.
   const deleteToast = React.useCallback(() => {
     // Save the offset for the exit swipe animation
+    // 이것들은 뭐지?
     setRemoved(true);
     setOffsetBeforeRemove(offset.current);
     setHeights((h) => h.filter((height) => height.toastId !== toast.id));
@@ -171,28 +181,35 @@ const Toast = (props: ToastProps) => {
     }, TIME_BEFORE_UNMOUNT);
   }, [toast, removeToast, setHeights, offset]);
 
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   React.useEffect(() => {
+    // promise, loading 이거나  duration이 무한하면 동작 안함.
     if ((toast.promise && toastType === 'loading') || toast.duration === Infinity || toast.type === 'loading') return;
     let timeoutId: NodeJS.Timeout;
 
-    // Pause the timer on each hover
+    // 타이머 정지
     const pauseTimer = () => {
+      // if 마지막 타이머 시작 시간 < 현재 타이머 시작 시간 =>대부분 이경우 아님?
       if (lastCloseTimerStartTimeRef.current < closeTimerStartTimeRef.current) {
-        // Get the elapsed time since the timer started
+        // Get the elapsed time since the timer started => 타이머 시작부터 정지되기까지의 경과시간 = 함수호출된 시점 - 타이머 시작시간
         const elapsedTime = new Date().getTime() - closeTimerStartTimeRef.current;
-
+        // 남은 시간 = 이전 남은시간 - 타이머 시작부터 정지되기까지의 경과시간
         remainingTime.current = remainingTime.current - elapsedTime;
+        // 나중에 다시 시작하면 remainingTime이 적어져서 타이머 금방 끝나게 됨.
       }
-
+      // 마지막의 타이머 시작시간 현재시간으로 업데이트
       lastCloseTimerStartTimeRef.current = new Date().getTime();
     };
 
+    // startTimer가 호출되면 remainingTime이 흐른 뒤에 toast가 닫힘.
     const startTimer = () => {
       // setTimeout(, Infinity) behaves as if the delay is 0.
       // As a result, the toast would be closed immediately, giving the appearance that it was never rendered.
       // See: https://github.com/denysdovhan/wtfjs?tab=readme-ov-file#an-infinite-timeout
+      // setTimeout(, Infinity)는 setTimeout(, 0)처럼 동작해서 toast가 바로 닫힐 수 있으니 Infinity인 경우는 얼리리턴
       if (remainingTime.current === Infinity) return;
 
+      // 타이머 시작시간을 지금시간으로 업데이트 => 타이머 정지할때 남은시간 계산하려면 필요함.
       closeTimerStartTimeRef.current = new Date().getTime();
 
       // Let the toast know it has started
@@ -202,22 +219,30 @@ const Toast = (props: ToastProps) => {
       }, remainingTime.current);
     };
 
+    // 열리거나, 상호작용 중이거나, (pauseWhenPageIsHidden && isDocumentHidden) 인 경우 타이머 정지,
     if (expanded || interacting || (pauseWhenPageIsHidden && isDocumentHidden)) {
       pauseTimer();
     } else {
+      // 열리지도 않고, 상호작용중도 아니고, (pauseWhenPageIsHidden && isDocumentHidden)인 케이스도 아니면 타이머 재생
       startTimer();
     }
 
     return () => clearTimeout(timeoutId);
   }, [expanded, interacting, toast, toastType, pauseWhenPageIsHidden, isDocumentHidden, deleteToast]);
 
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   React.useEffect(() => {
+    // 만약 랜더링 하는 toast(list item)의 delete속성이 true면 deleteToast함수 호출 , toast객체의 delete상태가 true면 지운다.
     if (toast.delete) {
       deleteToast();
     }
   }, [deleteToast, toast.delete]);
 
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // 로딩아이콘 가져오는 함수
   function getLoadingIcon() {
+    // icons는 처음 사용자가 <Toaster icons={{success:ReactNode, loading:ReactNode}}/> 이렇게 호출해야됨.
+    // 사용자가 설정한 경우, 그 아이콘을 리턴함.
     if (icons?.loading) {
       return (
         <div
@@ -228,7 +253,7 @@ const Toast = (props: ToastProps) => {
         </div>
       );
     }
-
+    // 낮은 우선순위로 <Toaster loadingIcon={ReactNode}/> 로 넘겨준게 있으면 그것을 리턴함.
     if (loadingIconProp) {
       return (
         <div
@@ -239,8 +264,10 @@ const Toast = (props: ToastProps) => {
         </div>
       );
     }
+    // 위 두 케이스에 해당되지 않는다면 기본 Loader 랜더링.
     return <Loader className={cn(classNames?.loader, toast?.classNames?.loader)} visible={toastType === 'loading'} />;
   }
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   return (
     <li
@@ -502,6 +529,7 @@ const Toaster = forwardRef<HTMLElement, ToasterProps>(function Toaster(props, re
     pauseWhenPageIsHidden,
     cn = _cn,
   } = props;
+  // toasts가 핵심.
   const [toasts, setToasts] = React.useState<ToastT[]>([]);
   // possiblePositions는 ['bottom-right', 'bottom-left'...] 이런 식
   const possiblePositions = React.useMemo(() => {
@@ -522,28 +550,39 @@ const Toaster = forwardRef<HTMLElement, ToasterProps>(function Toaster(props, re
       : 'light',
   );
 
-  const listRef = React.useRef<HTMLOListElement>(null);
-  const hotkeyLabel = hotkey.join('+').replace(/Key/g, '').replace(/Digit/g, '');
+  const listRef = React.useRef<HTMLOListElement>(null); // ol 태그 참조임.
+  const hotkeyLabel = hotkey.join('+').replace(/Key/g, '').replace(/Digit/g, ''); // 'alt+T' 이런식으로 파싱됨.
   const lastFocusedElementRef = React.useRef<HTMLElement>(null);
   const isFocusWithinRef = React.useRef(false);
 
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // 나중에 li로 전달되어서 closeButton의 클릭 event handler에서 호출됨.
   const removeToast = React.useCallback((toastToRemove: ToastT) => {
     setToasts((toasts) => {
+      // 기존에 있는 toasts 목록에서 매개변수로 받은 toast와 id가 같은것을 찾은 뒤, delete가 false인 경우..
       if (!toasts.find((toast) => toast.id === toastToRemove.id)?.delete) {
+        // dismiss method: 모든 subscribers 함수에게 {id, dismiss:true}를 인자로 호출시킴.(위 경우는 싱글톤 객체 업데이트)
         ToastState.dismiss(toastToRemove.id);
       }
 
+      // 아니면 그냥 기존 toasts에서 id 일치하는거 제외시킴(지역상태만 업데이트? - 싱글톤 객체 업데이트와 무슨차이지?)
       return toasts.filter(({ id }) => id !== toastToRemove.id);
     });
   }, []);
 
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   React.useEffect(() => {
+    // 첫 마운트 시에 한번 subscribe 시킴. subscribe에 인자로 들어간 함수가 subscriber 로 등록됨.
     return ToastState.subscribe((toast) => {
+      // 이제부터 이 함수가 subscriber가 되어 앱 전체적으로 호출될 것임.
       if ((toast as ToastToDismiss).dismiss) {
+        // 만약 매개변수로 받은 toast가 dismiss:true이면
+        // 기존 toasts에서 id가 같은 toast를 찾아서 delete속성을 true로 만든다. 나머지는 그대로 유지.
         setToasts((toasts) => toasts.map((t) => (t.id === toast.id ? { ...t, delete: true } : t)));
         return;
       }
-
+      // dismiss:true가 아닌 subscriber 호출이라면...
+      // batch update를 방지하기 위해 테스크큐에 작업을 하나 만들고, dom에 강제 업데이트.
       // Prevent batching, temp solution.
       setTimeout(() => {
         ReactDOM.flushSync(() => {
@@ -551,7 +590,9 @@ const Toaster = forwardRef<HTMLElement, ToasterProps>(function Toaster(props, re
             const indexOfExistingToast = toasts.findIndex((t) => t.id === toast.id);
 
             // Update the toast if it already exists
+            // 만약 매개변수로 받은 toast가 이미 화면에 존재한다면...
             if (indexOfExistingToast !== -1) {
+              // 정확히 그 toast를 찾아서 변경사항을 업데이트 한다.
               return [
                 ...toasts.slice(0, indexOfExistingToast),
                 { ...toasts[indexOfExistingToast], ...toast },
@@ -559,6 +600,7 @@ const Toaster = forwardRef<HTMLElement, ToasterProps>(function Toaster(props, re
               ];
             }
 
+            // toast가 새로운 객체라면 맨 앞에 추가한다.
             return [toast, ...toasts];
           });
         });
