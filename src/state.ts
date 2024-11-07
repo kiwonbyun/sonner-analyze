@@ -16,6 +16,7 @@ class Observer {
   }
 
   // We use arrow functions to maintain the correct `this` reference
+  // <Toaster /> 컴포넌트를 호출하거나, useSonner 훅을 호출하면 subscribe method가 호출되어 subscriber가 등록된다.
   subscribe = (subscriber: (toast: ToastT | ToastToDismiss) => void) => {
     // 인자로 받은 subscriber를 this.subscribers 배열에 추가함.
     this.subscribers.push(subscriber);
@@ -28,12 +29,15 @@ class Observer {
     };
   };
 
+  // 지금 싱글톤 객체에 등록된 subscriber들을 매개변수를 인자로 호출함.
   publish = (data: ToastT) => {
     this.subscribers.forEach((subscriber) => subscriber(data));
   };
 
   addToast = (data: ToastT) => {
+    // 싱글톤 객체의 subscriber들을 data를 인자로 호출 => <Toaster />컴포넌트 내부에 있는 지역 toasts 상태를 업데이트 시킴
     this.publish(data);
+    // 싱글톤 객체의 toasts에 직접 data를 추가
     this.toasts = [...this.toasts, data];
   };
 
@@ -52,9 +56,12 @@ class Observer {
     });
     const dismissible = data.dismissible === undefined ? true : data.dismissible;
 
+    // 만약 매개변수로 받은 data가 이미 this.toasts에 존재하는 toasts라면 업데이트라고 판단을 하고,
     if (alreadyExists) {
+      // this.toasts를 업데이트 하는데, 기존 내용이 매개변수로 받은 data로 업데이트를 하고
       this.toasts = this.toasts.map((toast) => {
         if (toast.id === id) {
+          // 지금 싱글톤 객체에 등록된 subscriber들을 호출하면서 업데이트 된 객체를 넘겨준다.
           this.publish({ ...toast, ...data, id, title: message });
           return {
             ...toast,
@@ -67,45 +74,66 @@ class Observer {
 
         return toast;
       });
+      // 위와같이 하게되면 싱글톤 객체도 업데이트가 되고, subscriber가 참조하는 지역상태도 업데이트 된다.
     } else {
+      // 아니면 완전 새 toast면 그냥 addToast호출, addToast가 알아서 지역상태와 싱글톤객체도 업데이트 해줌.
       this.addToast({ title: message, ...rest, dismissible, id });
     }
 
+    // this.create의 반환값은 생성한 toast의 id이다.
     return id;
   };
 
   dismiss = (id?: number | string) => {
+    // 만약, id 없이 호출되면
     if (!id) {
+      // 현재 toasts의 갯수만큼 subscriber를 호출하면서 인자로 모든 toast의 id로 {id, dismiss:true}를 준다.
       this.toasts.forEach((toast) => {
+        // 지역상태 관리자로 등록되는 subscriber들은 이 인자를 받으면 지역상태에서 걸러버리거나, delete속성을 true로 바꾼다.
+        // 모든 toasts가 delete:true가 될 것으로 예상함.
         this.subscribers.forEach((subscriber) => subscriber({ id: toast.id, dismiss: true }));
       });
     }
-
+    // 만약, 특정 id가 있다면 모든 subscriber를 특정 id로 {id, dismiss:true} 인자로 호출한다.
     this.subscribers.forEach((subscriber) => subscriber({ id, dismiss: true }));
+    // 반환값은 매개변수로 받은 id 그대로 반환
     return id;
   };
 
+  // 사용자가 toast.message()로 호출할 수 있음. ex. ('string', { description: 'string' })
   message = (message: titleT | React.ReactNode, data?: ExternalToast) => {
+    // this.create({description: 'string', message: 'string'})로 호출됨.
+    // 순차적으로 create -> addToast 가 호출되어, 지역상태와 싱글톤객체의 toasts배열에 추가함.
     return this.create({ ...data, message });
   };
 
   error = (message: titleT | React.ReactNode, data?: ExternalToast) => {
+    // this.create({description: 'string', message: 'string', type:"error"})로 호출됨.
+    // 순차적으로 create -> addToast 가 호출되어, 지역상태와 싱글톤객체의 toasts배열에 추가함.
     return this.create({ ...data, message, type: 'error' });
   };
 
   success = (message: titleT | React.ReactNode, data?: ExternalToast) => {
+    // this.create({description: 'string', message: 'string', type:"success"})로 호출됨.
+    // 순차적으로 create -> addToast 가 호출되어, 지역상태와 싱글톤객체의 toasts배열에 추가함.
     return this.create({ ...data, type: 'success', message });
   };
 
   info = (message: titleT | React.ReactNode, data?: ExternalToast) => {
+    // this.create({description: 'string', message: 'string', type:"info"})로 호출됨.
+    // 순차적으로 create -> addToast 가 호출되어, 지역상태와 싱글톤객체의 toasts배열에 추가함.
     return this.create({ ...data, type: 'info', message });
   };
 
   warning = (message: titleT | React.ReactNode, data?: ExternalToast) => {
+    // this.create({description: 'string', message: 'string', type:"warning"})로 호출됨.
+    // 순차적으로 create -> addToast 가 호출되어, 지역상태와 싱글톤객체의 toasts배열에 추가함.
     return this.create({ ...data, type: 'warning', message });
   };
 
   loading = (message: titleT | React.ReactNode, data?: ExternalToast) => {
+    // this.create({description: 'string', message: 'string', type:"loading"})로 호출됨.
+    // 순차적으로 create -> addToast 가 호출되어, 지역상태와 싱글톤객체의 toasts배열에 추가함.
     return this.create({ ...data, type: 'loading', message });
   };
 
@@ -189,6 +217,8 @@ class Observer {
 
   custom = (jsx: (id: number | string) => React.ReactElement, data?: ExternalToast) => {
     const id = data?.id || toastsCounter++;
+    // this.create({jsx, id, ...})로 호출됨.
+    // 순차적으로 create -> addToast 가 호출되어, 지역상태와 싱글톤객체의 toasts배열에 추가함.
     this.create({ jsx: jsx(id), id, ...data });
     return id;
   };

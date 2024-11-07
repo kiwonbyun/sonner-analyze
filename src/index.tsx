@@ -470,7 +470,11 @@ function getDocumentDirection(): ToasterProps['dir'] {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// 이상한 점: useSonner를 앱에서 여러번 호출하면 동일한 subscriber가 여러번 구독됨.
 function useSonner() {
+  // 여러번 호출되면 서로 다른 activeToasts 지역상태가 여러번 생기는거 아닌가?
+  // 싱글톤 객체인 ToastState가 동일한 보조함수를 여러번 구독하게됨. forEach로 실행시키기 때문에 다른 상태를 보는일을 없을것같긴 하지만
+  // useSonner를 여러번 호출하면 각자 동일한 데이터의 지역상태가 생기기 때문에 불필요한 메모리 낭비로 볼 수 있다.
   const [activeToasts, setActiveToasts] = React.useState<ToastT[]>([]);
 
   React.useEffect(() => {
@@ -531,15 +535,21 @@ const Toaster = forwardRef<HTMLElement, ToasterProps>(function Toaster(props, re
   } = props;
   // toasts가 핵심.
   const [toasts, setToasts] = React.useState<ToastT[]>([]);
-  // possiblePositions는 ['bottom-right', 'bottom-left'...] 이런 식
+  // possiblePositions는 ['bottom-right'] | ['bottom-left'] | ... 이런 식
   const possiblePositions = React.useMemo(() => {
     return Array.from(
       new Set([position].concat(toasts.filter((toast) => toast.position).map((toast) => toast.position))),
     );
   }, [toasts, position]);
+
+  // heights는 각 toast들의 id, height(실제높이), position(대부분 undefined) 구조체 배열
   const [heights, setHeights] = React.useState<HeightT[]>([]);
+  // expanded가 true가 되면 toasts들이 펼쳐짐
   const [expanded, setExpanded] = React.useState(false);
+  // interacting은 유저가 토스트를 만질때 true가 됨.
   const [interacting, setInteracting] = React.useState(false);
+
+  // 테마
   const [actualTheme, setActualTheme] = React.useState(
     theme !== 'system'
       ? theme
@@ -552,8 +562,8 @@ const Toaster = forwardRef<HTMLElement, ToasterProps>(function Toaster(props, re
 
   const listRef = React.useRef<HTMLOListElement>(null); // ol 태그 참조임.
   const hotkeyLabel = hotkey.join('+').replace(/Key/g, '').replace(/Digit/g, ''); // 'alt+T' 이런식으로 파싱됨.
-  const lastFocusedElementRef = React.useRef<HTMLElement>(null);
-  const isFocusWithinRef = React.useRef(false);
+  const lastFocusedElementRef = React.useRef<HTMLElement>(null); // 키보드 접근성 향상
+  const isFocusWithinRef = React.useRef(false); // 키보드 접근성 향상
 
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   // 나중에 li로 전달되어서 closeButton의 클릭 event handler에서 호출됨.
@@ -695,7 +705,8 @@ const Toaster = forwardRef<HTMLElement, ToasterProps>(function Toaster(props, re
 
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   React.useEffect(() => {
-    // 지금 화면에 toast가 있는데 언마운트 되면 이전 포커스를 초기화
+    // 지금 화면에 toast가 있는데 언마운트 되면 이전 포커스를 초기화 => 토스트를 클릭하면 마지막포커스가 토스트로 와버리기 때문에 다음 tab키를 눌렀을때 포커싱을 잃는다.
+    // 키보드 접근성 향상을 위해 toast 언마운트 이후에는 예전 포커스로 되돌려준다.
     if (listRef.current) {
       return () => {
         if (lastFocusedElementRef.current) {
